@@ -1,0 +1,561 @@
+Here's the updated complete website with chat history sidebar (triple dot style like ChatGPT) and LinkedIn thank you link:
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Video Call Companion</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .main-container {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* Chat History Sidebar */
+        .chat-history {
+            width: 280px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-right: 1px solid rgba(255, 255, 255, 0.3);
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .history-header {
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            font-weight: bold;
+            font-size: 16px;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .new-chat-btn {
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 15px;
+            transition: all 0.3s;
+        }
+
+        .new-chat-btn:hover {
+            background: rgba(255,255,255,0.3);
+            transform: translateY(-1px);
+        }
+
+        .chat-item {
+            padding: 15px 20px;
+            border-bottom: 1px solid #f0f0f0;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .chat-item:hover {
+            background: #f8f9ff;
+        }
+
+        .chat-item.active {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .chat-item-title {
+            font-weight: 600;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+
+        .chat-item-preview {
+            font-size: 12px;
+            opacity: 0.8;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .chat-item-time {
+            font-size: 11px;
+            opacity: 0.6;
+            margin-top: 5px;
+        }
+
+        /* Main Content Area */
+        .content-area {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .left-panel {
+            width: 70%;
+            display: flex;
+            flex-direction: column;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-right: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .right-panel {
+            width: 30%;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            overflow-y: auto;
+        }
+
+        .header {
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            text-align: center;
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .video-container {
+            flex: 1;
+            position: relative;
+            background: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #aiVideo {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 20px;
+        }
+
+        .controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 25px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+            flex: 1;
+            min-width: 120px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+
+        .btn.secondary {
+            background: rgba(255,255,255,0.2);
+        }
+
+        .chat-container {
+            height: 200px;
+            background: white;
+            border-radius: 15px;
+            padding: 15px;
+            margin: 10px 0;
+            overflow-y: auto;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .chat-message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 15px;
+            max-width: 80%;
+        }
+
+        .user-message {
+            background: #667eea;
+            color: white;
+            margin-left: auto;
+        }
+
+        .ai-message {
+            background: #f1f1f1;
+            color: #333;
+        }
+
+        .typing-indicator {
+            display: none;
+            padding: 10px;
+            background: #f1f1f1;
+            border-radius: 15px;
+            margin: 10px 0;
+        }
+
+        .typing-dots {
+            display: inline-flex;
+            gap: 4px;
+        }
+
+        .typing-dots span {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #999;
+            animation: typing 1.4s infinite;
+        }
+
+        .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes typing {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-10px); }
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        input, select, textarea {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 14px;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        /* Thank You Footer */
+        .thank-you-footer {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(255,255,255,0.95);
+            padding: 15px 25px;
+            border-radius: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            backdrop-filter: blur(20px);
+            z-index: 100;
+            text-align: center;
+            transition: all 0.3s;
+        }
+
+        .thank-you-footer:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+        }
+
+        .thank-you-link {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .thank-you-link:hover {
+            color: #764ba2;
+        }
+
+        .setup-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .file-upload {
+            border: 2px dashed #667eea;
+            padding: 30px;
+            text-align: center;
+            border-radius: 15px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin: 10px 0;
+        }
+
+        .file-upload:hover {
+            background: #f8f9ff;
+        }
+
+        .status {
+            text-align: center;
+            padding: 20px;
+            font-size: 18px;
+            color: #666;
+        }
+
+        .voice-options {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin: 10px 0;
+        }
+
+        @media (max-width: 1200px) {
+            .chat-history { width: 240px; }
+        }
+
+        @media (max-width: 768px) {
+            .main-container {
+                flex-direction: column;
+            }
+            .chat-history {
+                width: 100%;
+                height: 200px;
+                order: 3;
+            }
+            .content-area {
+                flex-direction: column;
+                height: calc(100vh - 200px);
+            }
+            .left-panel {
+                width: 100%;
+                height: 70%;
+            }
+            .right-panel {
+                width: 100%;
+                height: 30%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <!-- Chat History Sidebar -->
+        <div class="chat-history" id="chatHistory">
+            <div class="history-header">
+                💬 Conversations
+                <div class="new-chat-btn" id="newChatBtn">+ New Chat</div>
+            </div>
+            <div id="chatList"></div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="content-area">
+            <div class="left-panel">
+                <div class="header">🤖 AI Video Call Companion</div>
+                <div class="video-container">
+                    <video id="aiVideo" autoplay muted playsinline></video>
+                    <div class="controls">
+                        <button class="btn" id="toggleMic">🎤 Start Talking</button>
+                        <button class="btn secondary" id="changeVoice">Voice</button>
+                        <button class="btn secondary" id="changeBg">Background</button>
+                        <button class="btn secondary" id="normalChat">Normal Chat</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="right-panel">
+                <div class="chat-container" id="chatBox"></div>
+                <div class="input-group">
+                    <input type="text" id="messageInput" placeholder="Type your message...">
+                    <button class="btn" id="sendBtn">Send</button>
+                </div>
+                <div class="typing-indicator" id="typingIndicator">
+                    <div class="typing-dots">
+                        <span></span><span></span><span></span>
+                    </div>
+                    AI is typing...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Thank You Footer -->
+    <div class="thank-you-footer">
+        <div>Built with ❤️ by Abdul Tofik</div>
+        <a href="https://www.linkedin.com/in/abdul-tofik-00848b402/" 
+           target="_blank" 
+           class="thank-you-link"
+           rel="noopener noreferrer">
+            Connect on LinkedIn →
+        </a>
+    </div>
+
+    <!-- Setup Modal -->
+    <div class="setup-modal" id="setupModal">
+        <div class="modal-content">
+            <h2>🎭 Create Your AI Companion</h2>
+            <div class="file-upload" id="imageUpload">
+                <p>📸 Upload upper body image (clear face)</p>
+                <input type="file" id="imageFile" accept="image/*" style="display: none;">
+            </div>
+            
+            <div style="margin: 20px 0;">
+                <label>Status:</label>
+                <select id="personStatus">
+                    <option value="alive">Alive</option>
+                    <option value="dead">Deceased</option>
+                    <option value="fictional">Fictional</option>
+                </select>
+            </div>
+
+            <div id="personDetails" style="display: none;">
+                <input type="text" id="personName" placeholder="Full Name">
+                <input type="number" id="personAge" placeholder="Age">
+                <select id="personGender">
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="other">Other</option>
+                </select>
+                <textarea id="personNature" placeholder="Describe their nature/personality..."></textarea>
+            </div>
+
+            <div class="voice-options">
+                <button class="btn" data-voice="male-bold">Male Bold</button>
+                <button class="btn" data-voice="male-soft">Male Soft</button>
+                <button class="btn" data-voice="female-bold">Female Bold</button>
+                <button class="btn" data-voice="female-soft">Female Soft</button>
+            </div>
+            
+            <div class="file-upload" id="voiceUpload">
+                <p>🎵 Upload custom voice sample</p>
+                <input type="file" id="voiceFile" accept="audio/*" style="display: none;">
+            </div>
+            
+            <button class="btn" style="width: 100%; margin-top: 20px;" id="startSetup">Start Conversation</button>
+        </div>
+    </div>
+
+    <script>
+        class AIVideoCall {
+            constructor() {
+                this.video = document.getElementById('aiVideo');
+                this.chatBox = document.getElementById('chatBox');
+                this.messageInput = document.getElementById('messageInput');
+                this.typingIndicator = document.getElementById('typingIndicator');
+                this.chatHistory = document.getElementById('chatHistory');
+                this.chatList = document.getElementById('chatList');
+                
+                this.isTalking = false;
+                this.currentVoice = 'female-soft';
+                this.personData = {};
+                this.conversations = JSON.parse(localStorage.getItem('aiConversations')) || [];
+                this.currentChatId = null;
+                
+                this.init();
+            }
+
+            init() {
+                this.showSetupModal();
+                this.setupEventListeners();
+                this.renderChatHistory();
+                this.initAI();
+            }
+
+            setupEventListeners() {
+                document.getElementById('toggleMic').addEventListener('click', () => this.toggleTalking());
+                document.getElementById('sendBtn').addEventListener('click', () => this.sendMessage());
+                document.getElementById('messageInput').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this.sendMessage();
+                });
+                document.getElementById('newChatBtn').addEventListener('click', () => this.newChat());
+                
+                document.getElementById('personStatus').addEventListener('change', (e) => this.togglePersonDetails(e.target.value));
+                
+                // Setup modal events
+                document.getElementById('imageUpload').addEventListener('click', () => document.getElementById('imageFile').click());
+                document.getElementById('voiceUpload').addEventListener('click', () => document.getElementById('voiceFile').click());
+                document.getElementById('imageFile').addEventListener('change', (e) => this.handleImageUpload(e));
+                document.getElementById('voiceFile').addEventListener('change', (e) => this.handleVoiceUpload(e));
+                
+                document.querySelectorAll('.voice-options .btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        document.querySelector('.voice-options .btn.active')?.classList.remove('active');
+                        e.target.classList.add('active');
+                        this.currentVoice = e.target.dataset.voice;
+                    });
+                });
+                
+                document.getElementById('startSetup').addEventListener('click', () => this.startConversation());
+            }
+
+            renderChatHistory() {
+                this.chatList.innerHTML = '';
+                this.conversations.forEach((chat, index) => {
+                    const chatItem = document.createElement('div');
+                    chatItem.className = `chat-item ${this.currentChatId === chat.id ? 'active' : ''}`;
+                    chatItem.innerHTML = `
+                        <div class="chat-item-title">${chat.title || 'New Chat'}</div>
+                        <div class="chat-item-preview">${chat.preview}</div>
+                        <div class="chat-item-time">${this.formatTime(chat.timestamp)}</div>
+                    `;
+                    chatItem.addEventListener('click', () => this.loadChat(chat.id));
+                    this.chatList.appendChild(chatItem);
+                });
+            }
+
+            newChat() {
+                this.showSetupModal();
+                this.clearCurrentChat();
+            }
+
+            saveCurrentChat() {
+                if (!this.currentChatId || this.chatBox.children.length === 0) return;
+
+                const chatData = {
+                    id: this.currentChatId,
+                    title: this.personData.name || 'AI Companion',
+                    preview: this.chatBox.children[0]?.textContent.slice(0, 50) || '',
+                    timestamp: Date.now(),
+                    messages: Array.from(this.chatBox.children).map(msg => msg.textContent)
+                };
+
+                const existingIndex = this.conversations.findIndex(c => c.id === this.currentChatId);
+                if (existingIndex > -1) {
+                    this.conversations[existingIndex] = chatData;
+                } else {
+                    this
